@@ -1,0 +1,117 @@
+/**
+ * Created by Hugo Mori; hugooliveiramori@gmail.com
+ * Atualizado 10/12/2023
+ */
+
+// API para realização de consultas na BigQuery, direto das planilhas Sheets. Como o modelo é baseado em planilhas, 
+// algumas informações estão relacionadas a células que se encontram as informações e, portanto, são passiveis de alteração pelo usuário
+// É necessário saber, ao menos, o básico de SQL para realização das consultas
+// ============================= Functions ==========================================
+
+// A função pega o nome do cabeçalho da consulta, que está na célula de Linha e coluna repassada nos parametros, e cria uma nova aba naplanilha com o nome
+function createAba(nomeAba, linha, coluna) {
+
+  if (nomeAba == '') {
+    nomeAba = "BigQuery_" + Date.now();
+    planilha.getSheetByName("Report GSC").getRange(linha, coluna).setValue(nomeAba);
+  }
+
+  //criar nova aba da planilha de dados do Report
+  sheet = planilha.getSheetByName(nomeAba);
+
+  //se já existir, limpa a planilha
+  if (sheet != null) {
+    //console.log("Limpa planilha: " + nameReport);
+    sheet.clear();
+  }
+  else {
+    //console.log("Cria planilha: " + nomeAba);
+    sheet = planilha.insertSheet();
+    sheet.setName(nomeAba);
+  }
+
+  return sheet;
+}
+
+function runQuery() {
+// nome da aba da planilha que contém as querys de consulta
+  let abaDados = planilha.getSheetByName("Report GSC");
+
+//linha e coluna onde contém a 1ª query
+  let consultaColuna = 2;
+  let consultaLinha = 3;
+  let consulta;
+
+  // Replace this value with the project ID listed in the Google
+  // Cloud Platform project.
+  const projectId = '{Project_ID}';
+
+  try {
+    while ((consulta = abaDados.getRange(consultaLinha, consultaColuna).getValue()) != '') {
+
+      const request = {
+        // TODO (developer) - Replace query with yours
+        query: consulta,
+        useLegacySql: false,
+        location: "southamerica-east1",
+        timeoutMs: 300000
+      };
+      console.log(request.query);
+      let queryResults = BigQuery.Jobs.query(request, projectId);
+      const jobId = queryResults.jobReference.jobId;
+
+
+      // Check on status of the Query Job.
+      let sleepTimeMs = 500;
+      while (!queryResults.jobComplete) {
+        Utilities.sleep(sleepTimeMs);
+        sleepTimeMs *= 2;
+        queryResults = BigQuery.Jobs.getQueryResults(projectId, jobId);
+      }
+
+      // Get all the rows of results.
+      let rows = queryResults.rows;
+      while (queryResults.pageToken) {
+        queryResults = BigQuery.Jobs.getQueryResults(projectId, jobId, {
+          pageToken: queryResults.pageToken,
+          location: request.location
+        });
+        rows = rows.concat(queryResults.rows);
+      }
+
+      if (rows) {
+
+        const sheet = createAba(abaDados.getRange(consultaLinha - 1, consultaColuna).getValue(), consultaLinha - 1, consultaColuna);
+
+        // Append the headers.
+        const headers = queryResults.schema.fields.map(function (field) {
+          return field.name;
+        });
+        sheet.appendRow(headers);
+
+        // Append the results.
+        const data = new Array(rows.length);
+        for (let i = 0; i < rows.length; i++) {
+          const cols = rows[i].f;
+          data[i] = new Array(cols.length);
+          for (let j = 0; j < cols.length; j++) {
+            data[i][j] = cols[j].v;
+          }
+        }
+        sheet.getRange(2, 1, rows.length, headers.length).setValues(data);
+      }
+      else {
+        console.log('No rows returned.');
+      }
+
+      consultaColuna++;
+      consulta = '';
+    }
+    Browser.msgBox('Consultas Concluídas!');
+  }
+  catch (e) {
+    console.log("Erro de execução: " + e);
+    Browser.msgBox('Erro: ' + e);
+  }
+
+}
