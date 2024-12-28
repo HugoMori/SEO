@@ -1,0 +1,395 @@
+/**
+* Created by Hugo Mori; hugooliveiamori@gmail.com
+* Atualizado em 25/01/2024
+*/
+
+// ============================= Variveis Globais ================================
+let planilha = SpreadsheetApp.getActiveSpreadsheet();
+
+// ============================= Report ==========================================
+
+/**
+ * Runs a report of a Google Analytics 4 property ID. Creates a sheet with the
+ * report.
+ */
+
+function runReport() {
+
+  // selecionar a aba do sheets ativo que você quer
+  let abaDados = planilha.getSheetByName("Report");
+
+  //coluna de inicio dos reports
+  let reportDado = 2;
+
+  //variavel de armazenamento do ID da propriedade
+  let propertyId = '';
+
+  //variavel de armazenamento dos nomes dos reports
+  let nameReport = '';
+
+  //variavel de armazenamento das abas de report
+  let sheet;
+
+  //variavel de armazenamento das datas
+  let dateRange;
+  let date_inicio;
+  let date_fim;
+
+  //variaveis de métricas e dimensões
+  let metricas = [];
+  let metricasNames;
+  let dimension;
+  let dimensoes = [];
+  let dimensaoNames;
+
+  //variaveis de request e report
+  let request;
+  let report;
+
+  //variaveis de escrita em planilha
+  let dimensionHeaders;
+  let metricHeaders;
+  let headers;
+  let dimensionValues;
+  let metricValues;
+
+  //variaveis de filtragem
+  //----- Dimensões
+  let dimensoesFilterNames = [];
+  let expDimensionsFilters = [];
+  let dimensionsFilterType = [];
+  let dimensoesFilters = [];
+  let dimensionfilter;
+  let filterExpression = [];
+  //----- métricas
+  let metricasFilterNames = [];
+  let expmetricasFilters = [];
+  let metricasFilterType = [];
+  let metricasFilters = [];
+  let metricasfilter;
+  let filterExpressionMetricas = [];
+
+  //varivaies de locomoção em planilha
+  let rows;
+  let i = 0;
+
+  //Como estou baseando o modelo em uma planilha, aqui ele está pegando a informação da propriedde que está em uma determinada célula
+  while ((propertyId = abaDados.getRange(4, reportDado).getValue()) != '') {
+
+    console.log("id: "+propertyId);
+    try {
+
+      //--------------- Nome do Report
+      //nome da aba de Dados de Report, caso tenha assado um nome, será o nome passado, se não, um nome aleatório
+      nameReport = "";
+      //Como estou baseando o modelo em uma planilha, aqui ele está pegando a informação do nme da extração, para criação de uma nova aba de extração
+      nameReport = abaDados.getRange(3, reportDado).getValue() != '' ? abaDados.getRange(3, reportDado).getValue() : ("Report" + reportDado);
+
+      //console.log("Report: "+nameReport+" iniciado.");
+
+      //--------------- Métricas e Dimensões do Report
+      metricasNames = [];
+      // as métricas estão sendo separadas pelo caracter ',', mas você pode alterar para o formato mais adequado seu
+      metricasNames = abaDados.getRange(7, reportDado).getValue().split(',');
+      //console.log(metricasNames);
+
+      metricas = [];
+      //console.log("Métricas: ");
+      for (i = 0; i < metricasNames.length; i++) {
+        //console.log(metricasNames[i].trim());
+        metricas[i] = AnalyticsData.newMetric();
+        metricas[i].name = metricasNames[i].trim();
+        //console.log(metricas[i].name);
+      }
+
+      dimensaoNames = [];
+      // as dimenrsões estão sendo separadas pelo caracter ',', mas você pode alterar para o formato mais adequado seu
+      dimensaoNames = abaDados.getRange(8, reportDado).getValue().split(',');
+      //console.log(dimensaoNames);
+
+      dimensoes = [];
+      //console.log("Dimensões: ");
+      for (i = 0; i < dimensaoNames.length; i++) {
+        //console.log(dimensaoNames[i].trim());
+        dimensoes[i] = AnalyticsData.newDimension();
+        dimensoes[i].name = dimensaoNames[i].trim();
+        //console.log(dimensoes[i].name);
+      }
+
+      //--------------- Filtros
+
+      //############# Filtro Dimensão
+      //se estiver habilitado filtro de dimensão
+      if (abaDados.getRange(10, reportDado).getValue()) {
+
+        dimensionfilter = AnalyticsData.newFilterExpression();
+        dimensionfilter.andGroup = AnalyticsData.newFilterExpressionList();
+        dimensionfilter.andGroup.expressions = [];
+
+        //dimensões de filtragem
+        dimensoesFilterNames = [];
+        // as dimensões de filtragem estão sendo separadas pelo caracter ',', mas você pode alterar para o formato mais adequado seu
+        dimensoesFilterNames = abaDados.getRange(12, reportDado).getValue().split(',');
+        console.log(dimensoesFilterNames);
+
+        //tipos de dimensões de filtragem
+        dimensionsFilterType = [];
+        // os tipos de filtros que serã utilizados estão sendo separadas pelo caracter ',', mas você pode alterar para o formato mais adequado seu
+        dimensionsFilterType = abaDados.getRange(13, reportDado).getValue().split(',');
+        console.log(dimensionsFilterType);
+
+        //expressões de filtragem
+        expDimensionsFilters = [];
+        // as expressões filtragem estão sendo separadas pelo caracter ',', mas você pode alterar para o formato mais adequado seu
+        expDimensionsFilters = abaDados.getRange(14, reportDado).getValue().split(',');
+        console.log(expDimensionsFilters);
+
+        console.log("Dimensões de Filtro: ");
+        filterExpression = [];
+        for (i = 0; i < dimensoesFilterNames.length; i++) {
+          console.log(dimensoesFilterNames[i].trim());
+
+          filterExpression[i] = AnalyticsData.newFilterExpression();
+
+          //No modelo que fiz, utilizei os tipos de filtro como números, mas você pode alterar para o formato que mais te agrade
+          switch (dimensionsFilterType[i]) {
+
+            //REGEX
+            case '1':
+              filterExpression[i].filter = AnalyticsData.newFilter();
+
+              //recebe a dimensão que será filtrada
+              filterExpression[i].filter.fieldName = dimensoesFilterNames[i].trim();
+              //console.log(filterExpression[i].filter.fieldName);
+
+              //recebe a expressão de filtragem
+              filterExpression[i].filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].filter.stringFilter.value);
+              filterExpression[i].filter.stringFilter.matchType = 'PARTIAL_REGEXP';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Começa com
+            case '2':
+              filterExpression[i].filter = AnalyticsData.newFilter();
+
+              //recebe a dimensão que será filtrada
+              filterExpression[i].filter.fieldName = dimensoesFilterNames[i].trim();
+              //console.log(filterExpression[i].filter.fieldName);
+
+              //recebe a expressão de filtragem
+              filterExpression[i].filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].filter.stringFilter.value);
+              filterExpression[i].filter.stringFilter.matchType = 'BEGINS_WITH';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Termina com
+            case '3':
+              filterExpression[i].filter = AnalyticsData.newFilter();
+
+              //recebe a dimensão que será filtrada
+              filterExpression[i].filter.fieldName = dimensoesFilterNames[i].trim();
+              //console.log(filterExpression[i].filter.fieldName);
+
+              //recebe a expressão de filtragem
+              filterExpression[i].filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].filter.stringFilter.value);
+              filterExpression[i].filter.stringFilter.matchType = 'ENDS_WITH';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Contém
+            case '4':
+              filterExpression[i].filter = AnalyticsData.newFilter();
+
+              //recebe a dimensão que será filtrada
+              filterExpression[i].filter.fieldName = dimensoesFilterNames[i].trim();
+              //console.log(filterExpression[i].filter.fieldName);
+
+              //recebe a expressão de filtragem
+              filterExpression[i].filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].filter.stringFilter.value);
+              filterExpression[i].filter.stringFilter.matchType = 'CONTAINS';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Igual
+            case '5':
+              filterExpression[i].filter = AnalyticsData.newFilter();
+
+              //recebe a dimensão que será filtrada
+              filterExpression[i].filter.fieldName = dimensoesFilterNames[i].trim();
+              //console.log(filterExpression[i].filter.fieldName);
+
+              //recebe a expressão de filtragem
+              filterExpression[i].filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].filter.stringFilter.value);
+              filterExpression[i].filter.stringFilter.matchType = 'EXACT';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Não contém REGEX
+            case '6':
+              filterExpression[i].notExpression = {};
+              filterExpression[i].notExpression.filter = AnalyticsData.newFilter();
+              filterExpression[i].notExpression.filter.fieldName = dimensoesFilterNames[i].trim();
+              filterExpression[i].notExpression.filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].notExpression.filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].notExpression.filter.stringFilter.value);
+              filterExpression[i].notExpression.filter.stringFilter.matchType = 'PARTIAL_REGEXP';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Não Começa com
+            case '7':
+              filterExpression[i].notExpression = {};
+              filterExpression[i].notExpression.filter = AnalyticsData.newFilter();
+              filterExpression[i].notExpression.filter.fieldName = dimensoesFilterNames[i].trim();
+              filterExpression[i].notExpression.filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].notExpression.filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].notExpression.filter.stringFilter.value);
+              filterExpression[i].notExpression.filter.stringFilter.matchType = 'BEGINS_WITH';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Não Termina com
+            case '8':
+              filterExpression[i].notExpression = {};
+              filterExpression[i].notExpression.filter = AnalyticsData.newFilter();
+              filterExpression[i].notExpression.filter.fieldName = dimensoesFilterNames[i].trim();
+              filterExpression[i].notExpression.filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].notExpression.filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].notExpression.filter.stringFilter.value);
+              filterExpression[i].notExpression.filter.stringFilter.matchType = 'ENDS_WITH';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Não Contém
+            case '9':
+              filterExpression[i].notExpression = {};
+              filterExpression[i].notExpression.filter = AnalyticsData.newFilter();
+              filterExpression[i].notExpression.filter.fieldName = dimensoesFilterNames[i].trim();
+              filterExpression[i].notExpression.filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].notExpression.filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].notExpression.filter.stringFilter.value);
+              filterExpression[i].notExpression.filter.stringFilter.matchType = 'CONTAINS';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+
+            //Não é Igual
+            case '10':
+              filterExpression[i].notExpression = {};
+              filterExpression[i].notExpression.filter = AnalyticsData.newFilter();
+              filterExpression[i].notExpression.filter.fieldName = dimensoesFilterNames[i].trim();
+              filterExpression[i].notExpression.filter.stringFilter = AnalyticsData.newStringFilter();
+              filterExpression[i].notExpression.filter.stringFilter.value = expDimensionsFilters[i].trim();
+              console.log(filterExpression[i].notExpression.filter.stringFilter.value);
+              filterExpression[i].notExpression.filter.stringFilter.matchType = 'EXACT';
+              dimensionfilter.andGroup.expressions.push(filterExpression[i]);
+              break;
+          }
+
+          //dimensionfilter.andGroup.expressions.push({ filter: filterExpression[i] });
+        }
+
+        //dimensionfilter.andGroup.expressions.push(filterExpression);
+      }
+
+      //--------------- Intervalo de Datas do Report
+      dateRange = AnalyticsData.newDateRange();
+
+      // data de inicio
+      date_inicio = "";
+      date_inicio = new Date(abaDados.getRange(5, reportDado).getValue());
+      dateRange.startDate = date_inicio.toISOString().substring(0, 10);
+      //console.log("Data de inicio: "+dateRange.startDate);
+
+      //data de término
+      date_fim = "";
+      date_fim = new Date(abaDados.getRange(6, reportDado).getValue());
+      dateRange.endDate = date_fim.toISOString().substring(0, 10);
+      //console.log("Data de fim: "+dateRange.endDate);
+
+
+      //--------------- Requisições do Report
+      request = AnalyticsData.newRunReportRequest();
+
+      request.dimensions = [dimensoes];
+      //console.log(request.dimensions); 
+
+      request.metrics = [metricas];
+      //console.log(request.metrics); 
+
+      request.dateRanges = dateRange;
+
+      if (abaDados.getRange(10, reportDado).getValue()) { request.dimensionFilter = dimensionfilter; }
+
+      //numero de linhas máximas retornadas
+      request.limit = 100000;
+
+      report = AnalyticsData.Properties.runReport(request,
+        'properties/' + propertyId);
+
+      if (report.rows) {
+        //criar nova aba da planilha de dados do Report
+        sheet = planilha.getSheetByName(nameReport);
+
+        //se já existir, limpa a planilha
+        if (sheet != null) {
+          //console.log("Limpa planilha: " + nameReport);
+          sheet.clear();
+        }
+        else {
+          //console.log("Cria planilha: " + nameReport);
+          sheet = planilha.insertSheet();
+          sheet.setName(nameReport);
+        }
+
+        // Append the headers.
+        dimensionHeaders = report.dimensionHeaders.map(
+          (dimensionHeader) => {
+            return dimensionHeader.name;
+          });
+        metricHeaders = report.metricHeaders.map(
+          (metricHeader) => {
+            return metricHeader.name;
+          });
+        headers = [...dimensionHeaders, ...metricHeaders];
+
+        sheet.appendRow(headers);
+
+        // Append the results.
+        rows = report.rows.map((row) => {
+          dimensionValues = row.dimensionValues.map(
+            (dimensionValue) => {
+              return dimensionValue.value;
+            });
+          metricValues = row.metricValues.map(
+            (metricValues) => {
+              return metricValues.value;
+            });
+          return [...dimensionValues, ...metricValues];
+        });
+
+        sheet.getRange(2, 1, report.rows.length, headers.length)
+          .setValues(rows);
+
+        /*console.log('Report spreadsheet created: %s',
+          spreadsheet.getUrl());*/
+      }
+
+    } catch (e) {
+      // TODO (Developer) - Handle exception
+      console.log('Failed with error: %s', e.error);
+    }
+
+    reportDado++;
+  }
+
+}
